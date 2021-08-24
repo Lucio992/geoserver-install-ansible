@@ -1,0 +1,13 @@
+---
+  - name: copy dir from remote to host
+    hosts: geoserver 
+    become: yes
+    tasks:
+      - name: 
+        shell: tar -czvf {{zipped_dir}}.tar.gz {{from}}
+
+      - name: Copy crt in Ansible-Master
+        fetch:
+          src: "{{from}}.tar.gz"
+          dest: "{{to}}"
+          flat: yes

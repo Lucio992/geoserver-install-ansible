@@ -1,0 +1,98 @@
+---
+  - name: luks encr
+    hosts: geoserver 
+    become: yes
+    tasks:
+      
+      - name:
+        shell: apt-get install -y openjdk-11-jdk-headless
+
+      - name:
+        shell: apt-get install -y unar
+
+      - name: copy geoserver for set up
+        ansible.builtin.copy:
+          src: {{path_to_geoserver_dir}}
+          dest: /home/{{ ansible_user }}/
+          owner: "{{ansible_user}}"
+          group: "{{ansible_user}}"
+
+      - name: a
+        shell: cd /home/{{ansible_user}}/geoserver && grep -rl "zip"
+        register: zip
+
+      - debug:
+          msg: "{{zip.stdout}}"
+      
+      - name: b
+        shell: unar /home/{{ansible_user}}/geoserver/{{zip.stdout}} -o /home/{{ansible_user}}/geoserver/
+        become_user: "{{ansible_user}}"
+      
+      - name: c
+        shell: rm -r /home/{{ansible_user}}/geoserver/{{zip.stdout}}
+      
+      - name: d
+        shell: cd /home/{{ansible_user}}/geoserver && find . | grep "bin" -m 1
+        register: geoserver
+        
+      - debug:
+          msg: "{{geoserver.stdout_lines}}"
+      
+      - name: move /etc/default/geoserver
+        shell: mv /home/{{ansible_user}}/geoserver/{{geoserver.stdout}} /usr/share/
+
+      - name: check if s link exist
+        stat:
+          path: /usr/share/geoserver
+        register: slink
+
+      - name: move /etc/default/geoserver
+        shell: ln -s /usr/share/{{geoserver.stdout}} /usr/share/geoserver
+        when: not slink.stat.exists 
+
+      - name: move /etc/default/geoserver
+        shell: mv /home/{{ansible_user}}/geoserver/default/geoserver /etc/default/
+
+      - name: move /etc/default/geoserver
+        shell: mv /home/{{ansible_user}}/geoserver/init.d/geoserver /etc/init.d/
+      
+      - name:
+        ansible.builtin.replace:
+            path: /etc/default/geoserver
+            regexp: "insertYourIp"
+            replace: "{{ansible_host}}"
+      
+      - name:
+        ansible.builtin.replace:
+            path: /etc/default/geoserver
+            regexp: "insertYourPort"
+            replace: "{{geoserver_port}}"
+      
+      - name:
+        shell: cd /etc/init.d/ && chmod +x geoserver
+
+      - name :
+        ansible.builtin.lineinfile:
+            path: /home/{{ansible_user}}/.profile
+            line: 'export GEOSERVER_HOME=/usr/share/geoserver'
+        become_user: "{{ansible_user}}"
+
+      - name: 
+        shell: . /home/{{ansible_user}}/.profile
+        become_user: "{{ansible_user}}"
+
+      - name:
+        shell: chown -R {{ansible_user}}:{{ansible_user}} /usr/share/{{geoserver.stdout}}
+
+      - name: 
+        shell: systemctl daemon-reload
+
+      - name : wait for ntpstat to be UP
+        pause :
+          seconds: 10
+
+      - name:
+        shell: service geoserver start << {{ansible_become_pass}}
+
+      - name:
+        shell: update-rc.d geoserver defaults
